@@ -1,0 +1,12 @@
+# Archivo: .htaccess (en la raíz del proyecto)
+Options -Indexes
+
+<Files "*.log">
+    Order allow,deny
+    Deny from all
+</Files>
+
+php_value upload_max_filesize 10M
+php_value post_max_size 10M
+php_value max_execution_time 30
+php_value max_input_time 60
