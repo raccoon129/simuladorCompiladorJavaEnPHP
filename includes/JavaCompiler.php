@@ -23,7 +23,7 @@ class JavaCompiler {
         $ast = [];
         $lines = explode("\n", $code);
         
-        foreach ($lines as $line) {
+        foreach ($lines as $lineNumber => $line) {
             $line = trim($line);
             if (empty($line)) continue;
             
@@ -31,7 +31,8 @@ class JavaCompiler {
             if (preg_match('/class\s+(\w+)\s*{?/', $line, $matches)) {
                 $ast[] = [
                     'type' => 'class_declaration',
-                    'name' => $matches[1]
+                    'name' => $matches[1],
+                    'line' => $lineNumber + 1
                 ];
                 continue;
             }
@@ -39,18 +40,31 @@ class JavaCompiler {
             // Detectar método main
             if (preg_match('/public\s+static\s+void\s+main/', $line)) {
                 $ast[] = [
-                    'type' => 'main_method'
+                    'type' => 'main_method',
+                    'line' => $lineNumber + 1
                 ];
                 continue;
             }
             
-            // Detectar declaración de variables
-            if (preg_match('/(int|String|double|boolean)\s+(\w+)\s*=\s*(.+);/', $line, $matches)) {
+            // Detectar declaración de variables (incluyendo String)
+            if (preg_match('/(String|int|double|float)\s+(\w+)\s*=\s*(.+);/', $line, $matches)) {
                 $ast[] = [
                     'type' => 'variable_declaration',
                     'var_type' => $matches[1],
                     'name' => $matches[2],
-                    'value' => $matches[3]
+                    'value' => $matches[3],
+                    'line' => $lineNumber + 1
+                ];
+                continue;
+            }
+            
+            // Detectar asignaciones con operaciones
+            if (preg_match('/(\w+)\s*=\s*(.+);/', $line, $matches)) {
+                $ast[] = [
+                    'type' => 'assignment',
+                    'name' => $matches[1],
+                    'value' => $matches[2],
+                    'line' => $lineNumber + 1
                 ];
                 continue;
             }
@@ -59,26 +73,8 @@ class JavaCompiler {
             if (preg_match('/System\.out\.println\((.*)\);/', $line, $matches)) {
                 $ast[] = [
                     'type' => 'print',
-                    'content' => $matches[1]
-                ];
-                continue;
-            }
-            
-            // Detectar if statement
-            if (preg_match('/if\s*\((.*)\)\s*{?/', $line, $matches)) {
-                $ast[] = [
-                    'type' => 'if_statement',
-                    'condition' => $matches[1]
-                ];
-                continue;
-            }
-            
-            // Detectar asignación de variables
-            if (preg_match('/(\w+)\s*=\s*(.+);/', $line, $matches)) {
-                $ast[] = [
-                    'type' => 'assignment',
-                    'name' => $matches[1],
-                    'value' => $matches[2]
+                    'content' => $matches[1],
+                    'line' => $lineNumber + 1
                 ];
                 continue;
             }
@@ -102,29 +98,27 @@ class JavaCompiler {
                     break;
                     
                 case 'variable_declaration':
+                    $valor = $this->evaluateExpression($node['value']);
                     $this->variables[$node['name']] = [
                         'type' => $node['var_type'],
-                        'value' => $this->evaluateExpression($node['value'])
+                        'value' => $valor
                     ];
-                    $output .= "Declarando variable {$node['name']} de tipo {$node['var_type']} con valor {$this->variables[$node['name']]['value']}\n";
-                    break;
-                    
-                case 'print':
-                    $content = $this->evaluateExpression($node['content']);
-                    $output .= "Ejecutando System.out.println()\n";
-                    $this->consoleOutput .= $content . "\n";
-                    break;
-                    
-                case 'if_statement':
-                    $output .= "Evaluando condición: " . $node['condition'] . "\n";
+                    $output .= "Declarando variable {$node['name']} de tipo {$node['var_type']} con valor {$valor}\n";
                     break;
                     
                 case 'assignment':
                     if (!isset($this->variables[$node['name']])) {
-                        throw new Exception("Variable {$node['name']} no declarada");
+                        throw new Exception("Variable {$node['name']} no declarada en línea {$node['line']}");
                     }
-                    $this->variables[$node['name']]['value'] = $this->evaluateExpression($node['value']);
-                    $output .= "Asignando valor {$node['value']} a {$node['name']}\n";
+                    $valor = $this->evaluateExpression($node['value']);
+                    $this->variables[$node['name']]['value'] = $valor;
+                    $output .= "Asignando valor {$valor} a {$node['name']}\n";
+                    break;
+                    
+                case 'print':
+                    $content = $this->evaluatePrintContent($node['content']);
+                    $output .= "Ejecutando System.out.println()\n";
+                    $this->consoleOutput .= $content . "\n";
                     break;
             }
         }
@@ -132,30 +126,88 @@ class JavaCompiler {
         return $output;
     }
     
-    private function evaluateExpression($expression) {
-        // Si es una concatenación de string con variable
-        if (strpos($expression, '+') !== false && strpos($expression, '"') !== false) {
-            $parts = explode('+', $expression);
+    private function evaluatePrintContent($content) {
+        // Si el contenido es solo una variable
+        if (isset($this->variables[$content])) {
+            return $this->variables[$content]['value'];
+        }
+
+        // Si el contenido es una cadena literal
+        if (preg_match('/^"(.*)"$/', $content, $matches)) {
+            return $matches[1];
+        }
+
+        // Si es una concatenación (contiene + y posiblemente strings)
+        if (strpos($content, '+') !== false) {
+            $parts = explode('+', $content);
             $result = '';
+            
             foreach ($parts as $part) {
                 $part = trim($part);
+                
+                // Si es una cadena literal
                 if (preg_match('/^"(.*)"$/', $part, $matches)) {
                     $result .= $matches[1];
-                } elseif (isset($this->variables[$part])) {
+                }
+                // Si es una variable
+                elseif (isset($this->variables[$part])) {
                     $result .= $this->variables[$part]['value'];
                 }
+                // Si es una expresión aritmética
+                else {
+                    $result .= $this->evaluateExpression($part);
+                }
             }
+            
             return $result;
         }
+
+        // Si no es ninguno de los casos anteriores, intentar evaluar como expresión
+        return $this->evaluateExpression($content);
+    }
+    
+    private function evaluateExpression($expression) {
+        // Remover espacios en blanco
+        $expression = trim($expression);
         
-        // Remover comillas de strings
+        // Si es una cadena literal, retornarla sin las comillas
         if (preg_match('/^"(.*)"$/', $expression, $matches)) {
             return $matches[1];
         }
         
-        // Evaluar variables
+        // Si es una variable simple, retornar su valor
         if (isset($this->variables[$expression])) {
             return $this->variables[$expression]['value'];
+        }
+        
+        // Si es una operación aritmética
+        if (preg_match('/[\d\s\+\-\*\/\(\)]|\b[a-zA-Z_]\w*\b/', $expression)) {
+            // Reemplazar variables por sus valores
+            $evaluatedExpression = preg_replace_callback(
+                '/\b([a-zA-Z_]\w*)\b/',
+                function($matches) {
+                    if (isset($this->variables[$matches[1]])) {
+                        return $this->variables[$matches[1]]['value'];
+                    }
+                    throw new Exception("Variable {$matches[1]} no encontrada");
+                },
+                $expression
+            );
+            
+            // Si solo contiene números y operadores
+            if (preg_match('/^[\d\s\+\-\*\/\(\)]+$/', $evaluatedExpression)) {
+                $evaluatedExpression = str_replace(' ', '', $evaluatedExpression);
+                try {
+                    return eval("return " . $evaluatedExpression . ";");
+                } catch (ParseError $e) {
+                    throw new Exception("Error al evaluar la expresión aritmética: " . $evaluatedExpression);
+                }
+            }
+        }
+        
+        // Si es un número simple
+        if (is_numeric($expression)) {
+            return $expression;
         }
         
         return $expression;
