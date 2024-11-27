@@ -1,17 +1,24 @@
 <?php
 class JavaCompiler {
+    // Almacena las variables del programa y sus valores durante la ejecución
     private $variables = [];
+    // Almacena la salida del proceso de compilación
     private $output = '';
+    // Almacena la salida que se mostrará en la consola simulada
     private $consoleOutput = '';
     
+    // Método principal que inicia el proceso de compilación
     public function compile($code) {
         try {
+            // Genera el árbol de sintaxis abstracta (AST) a partir del código
             $ast = $this->parseCode($code);
+            // Ejecuta el AST y retorna los resultados
             return [
-                'compilacion' => $this->executeAST($ast),
-                'consola' => $this->consoleOutput
+                'compilacion' => $this->executeAST($ast),  // Log del proceso de compilación
+                'consola' => $this->consoleOutput         // Salida que verá el usuario
             ];
         } catch (Exception $e) {
+            // Si hay algún error, lo reporta tanto en compilación como en consola
             return [
                 'compilacion' => "Error: " . $e->getMessage(),
                 'consola' => "Error en tiempo de ejecución: " . $e->getMessage()
@@ -19,15 +26,16 @@ class JavaCompiler {
         }
     }
     
+    // Analiza el código línea por línea y construye el AST
     private function parseCode($code) {
-        $ast = [];
-        $lines = explode("\n", $code);
+        $ast = [];  // Aquí se almacenarán los nodos del árbol
+        $lines = explode("\n", $code);  // Divide el código en líneas
         
         foreach ($lines as $lineNumber => $line) {
-            $line = trim($line);
-            if (empty($line)) continue;
+            $line = trim($line);  // Elimina espacios en blanco al inicio y final
+            if (empty($line)) continue;  // Salta líneas vacías
             
-            // Detectar declaración de clase
+            // Detecta declaración de clase (ej: public class MiClase)
             if (preg_match('/class\s+(\w+)\s*{?/', $line, $matches)) {
                 $ast[] = [
                     'type' => 'class_declaration',
@@ -37,7 +45,7 @@ class JavaCompiler {
                 continue;
             }
             
-            // Detectar método main
+            // Detecta método main
             if (preg_match('/public\s+static\s+void\s+main/', $line)) {
                 $ast[] = [
                     'type' => 'main_method',
@@ -46,19 +54,21 @@ class JavaCompiler {
                 continue;
             }
             
-            // Detectar declaración de variables (incluyendo String)
+            // Detecta declaraciones de variables con inicialización
+            // Ej: int x = 5; o String mensaje = "Hola";
             if (preg_match('/(String|int|double|float)\s+(\w+)\s*=\s*(.+);/', $line, $matches)) {
                 $ast[] = [
                     'type' => 'variable_declaration',
-                    'var_type' => $matches[1],
-                    'name' => $matches[2],
-                    'value' => $matches[3],
+                    'var_type' => $matches[1],  // tipo de variable
+                    'name' => $matches[2],      // nombre de variable
+                    'value' => $matches[3],     // valor inicial
                     'line' => $lineNumber + 1
                 ];
                 continue;
             }
             
-            // Detectar asignaciones con operaciones
+            // Detecta asignaciones a variables existentes
+            // Ej: x = 10;
             if (preg_match('/(\w+)\s*=\s*(.+);/', $line, $matches)) {
                 $ast[] = [
                     'type' => 'assignment',
@@ -69,7 +79,7 @@ class JavaCompiler {
                 continue;
             }
             
-            // Detectar System.out.println
+            // Detecta llamadas a System.out.println
             if (preg_match('/System\.out\.println\((.*)\);/', $line, $matches)) {
                 $ast[] = [
                     'type' => 'print',
@@ -83,6 +93,7 @@ class JavaCompiler {
         return $ast;
     }
     
+    // Ejecuta el árbol de sintaxis abstracta
     private function executeAST($ast) {
         $output = '';
         $this->consoleOutput = '';
@@ -90,14 +101,17 @@ class JavaCompiler {
         foreach ($ast as $node) {
             switch ($node['type']) {
                 case 'class_declaration':
+                    // Registra la declaración de la clase
                     $output .= "Declarando clase: " . $node['name'] . "\n";
                     break;
                     
                 case 'main_method':
+                    // Registra el inicio del método main
                     $output .= "Iniciando método main\n";
                     break;
                     
                 case 'variable_declaration':
+                    // Evalúa y almacena una nueva variable
                     $valor = $this->evaluateExpression($node['value']);
                     $this->variables[$node['name']] = [
                         'type' => $node['var_type'],
@@ -107,6 +121,7 @@ class JavaCompiler {
                     break;
                     
                 case 'assignment':
+                    // Verifica que la variable exista antes de asignar
                     if (!isset($this->variables[$node['name']])) {
                         throw new Exception("Variable {$node['name']} no declarada en línea {$node['line']}");
                     }
@@ -116,6 +131,7 @@ class JavaCompiler {
                     break;
                     
                 case 'print':
+                    // Evalúa y muestra el contenido en la consola
                     $content = $this->evaluatePrintContent($node['content']);
                     $output .= "Ejecutando System.out.println()\n";
                     $this->consoleOutput .= $content . "\n";
@@ -126,18 +142,19 @@ class JavaCompiler {
         return $output;
     }
     
+    // Evalúa el contenido dentro de un println
     private function evaluatePrintContent($content) {
-        // Si el contenido es solo una variable
+        // Si es una variable simple, retorna su valor
         if (isset($this->variables[$content])) {
             return $this->variables[$content]['value'];
         }
 
-        // Si el contenido es una cadena literal
+        // Si es una cadena literal, retorna el contenido sin comillas
         if (preg_match('/^"(.*)"$/', $content, $matches)) {
             return $matches[1];
         }
 
-        // Si es una concatenación (contiene + y posiblemente strings)
+        // Si es una concatenación (contiene el operador +)
         if (strpos($content, '+') !== false) {
             $parts = explode('+', $content);
             $result = '';
@@ -145,44 +162,42 @@ class JavaCompiler {
             foreach ($parts as $part) {
                 $part = trim($part);
                 
-                // Si es una cadena literal
+                // Procesa cada parte de la concatenación
                 if (preg_match('/^"(.*)"$/', $part, $matches)) {
-                    $result .= $matches[1];
+                    $result .= $matches[1];  // Cadena literal
                 }
-                // Si es una variable
                 elseif (isset($this->variables[$part])) {
-                    $result .= $this->variables[$part]['value'];
+                    $result .= $this->variables[$part]['value'];  // Variable
                 }
-                // Si es una expresión aritmética
                 else {
-                    $result .= $this->evaluateExpression($part);
+                    $result .= $this->evaluateExpression($part);  // Expresión
                 }
             }
             
             return $result;
         }
 
-        // Si no es ninguno de los casos anteriores, intentar evaluar como expresión
+        // Si no es ninguno de los casos anteriores, evalúa como expresión
         return $this->evaluateExpression($content);
     }
     
+    // Evalúa expresiones (operaciones matemáticas, variables, etc.)
     private function evaluateExpression($expression) {
-        // Remover espacios en blanco
         $expression = trim($expression);
         
-        // Si es una cadena literal, retornarla sin las comillas
+        // Procesa cadenas literales
         if (preg_match('/^"(.*)"$/', $expression, $matches)) {
             return $matches[1];
         }
         
-        // Si es una variable simple, retornar su valor
+        // Procesa variables
         if (isset($this->variables[$expression])) {
             return $this->variables[$expression]['value'];
         }
         
-        // Si es una operación aritmética
+        // Procesa operaciones aritméticas
         if (preg_match('/[\d\s\+\-\*\/\(\)]|\b[a-zA-Z_]\w*\b/', $expression)) {
-            // Reemplazar variables por sus valores
+            // Reemplaza variables por sus valores
             $evaluatedExpression = preg_replace_callback(
                 '/\b([a-zA-Z_]\w*)\b/',
                 function($matches) {
@@ -194,7 +209,7 @@ class JavaCompiler {
                 $expression
             );
             
-            // Si solo contiene números y operadores
+            // Evalúa la expresión matemática
             if (preg_match('/^[\d\s\+\-\*\/\(\)]+$/', $evaluatedExpression)) {
                 $evaluatedExpression = str_replace(' ', '', $evaluatedExpression);
                 try {
@@ -205,7 +220,7 @@ class JavaCompiler {
             }
         }
         
-        // Si es un número simple
+        // Procesa números simples
         if (is_numeric($expression)) {
             return $expression;
         }
