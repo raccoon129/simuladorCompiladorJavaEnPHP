@@ -39,6 +39,15 @@ class AnalizadorSintactico {
                     // Procesa una declaración de método
                     $this->analizarMetodo();
                     break;
+                case 'if':
+                    $this->analizarIf();
+                    break;
+                case 'else':
+                    // Ignorar el token 'else' ya que se maneja en analizarIf
+                    break;
+                case 'for':
+                    $this->analizarFor();
+                    break;
                 default:
                     // Procesa una declaración de variable
                     $this->analizarVariable();
@@ -155,6 +164,106 @@ class AnalizadorSintactico {
         }
         
         // Agrega la variable al árbol sintáctico
+        $this->arbolSintactico[] = $nodo;
+    }
+
+    // Analiza la estructura de una estructura if
+    private function analizarIf() {
+        $nodo = [
+            'tipo' => 'if',
+            'linea' => $this->tokens[$this->posicionActual]['linea']
+        ];
+        
+        $this->posicionActual++; // Avanza después del 'if'
+        
+        // Validar paréntesis de apertura
+        if ($this->posicionActual >= count($this->tokens) || 
+            $this->tokens[$this->posicionActual]['valor'] !== '(') {
+            throw new Exception("Error de sintaxis: Se esperaba '(' después de 'if'");
+        }
+        
+        $this->posicionActual++; // Salta el paréntesis
+        $condicion = '';
+        $parentesisEncontrado = false;
+        
+        // Recopilar la condición
+        while ($this->posicionActual < count($this->tokens)) {
+            $token = $this->tokens[$this->posicionActual];
+            
+            if ($token['valor'] === ')') {
+                $parentesisEncontrado = true;
+                break;
+            }
+            
+            $condicion .= $token['valor'];
+            $this->posicionActual++;
+        }
+        
+        if (!$parentesisEncontrado) {
+            throw new Exception("Error de sintaxis: Falta ')'");
+        }
+        
+        $nodo['condicion'] = trim($condicion);
+        
+        // Buscar el bloque else correspondiente
+        $posicionOriginal = $this->posicionActual;
+        while ($this->posicionActual < count($this->tokens)) {
+            if ($this->tokens[$this->posicionActual]['tipo'] === 'palabra_reservada' && 
+                $this->tokens[$this->posicionActual]['valor'] === 'else') {
+                $nodo['has_else'] = true;
+                break;
+            }
+            $this->posicionActual++;
+        }
+        $this->posicionActual = $posicionOriginal;
+        
+        $this->arbolSintactico[] = $nodo;
+    }
+
+    // Analiza la estructura de una estructura for
+    private function analizarFor() {
+        $nodo = [
+            'tipo' => 'for',
+            'linea' => $this->tokens[$this->posicionActual]['linea']
+        ];
+        
+        $this->posicionActual++; // Avanza después del 'for'
+        
+        // Validar paréntesis de apertura
+        if ($this->tokens[$this->posicionActual]['valor'] !== '(') {
+            throw new Exception("Error de sintaxis: Se esperaba '(' después de 'for'");
+        }
+        $this->posicionActual++;
+        
+        // Analizar inicialización
+        $inicializacion = '';
+        while ($this->tokens[$this->posicionActual]['valor'] !== ';') {
+            $inicializacion .= $this->tokens[$this->posicionActual]['valor'];
+            $this->posicionActual++;
+        }
+        $nodo['inicializacion'] = trim($inicializacion);
+        $this->posicionActual++; // Salta el ;
+        
+        // Analizar condición
+        $condicion = '';
+        while ($this->tokens[$this->posicionActual]['valor'] !== ';') {
+            $condicion .= $this->tokens[$this->posicionActual]['valor'];
+            $this->posicionActual++;
+        }
+        $nodo['condicion'] = trim($condicion);
+        $this->posicionActual++; // Salta el ;
+        
+        // Analizar incremento
+        $incremento = '';
+        while ($this->tokens[$this->posicionActual]['valor'] !== ')') {
+            $incremento .= $this->tokens[$this->posicionActual]['valor'];
+            $this->posicionActual++;
+        }
+        $nodo['incremento'] = trim($incremento);
+        
+        // Inicializar array para el cuerpo del for
+        $nodo['body'] = [];
+        
         $this->arbolSintactico[] = $nodo;
     }
 

@@ -12,7 +12,7 @@ class AnalizadorLexico {
         'void', 'int', 'double', 'float', 'String', 'boolean', 'char', 'long', 'byte', 'short',
         
         // Estructuras de control
-        'if', 'else', 'while', 'for', 'do', 'switch', 'case', 'break', 'continue', 'return',
+        'if', 'else', 'while', 'for', 'do', 'switch', 'case', 'break', 'continue', 'return', 'int',
         
         // Otros
         'class', 'new', 'try', 'catch', 'finally', 'throw', 'throws', 'null', 'true', 'false',
@@ -59,6 +59,7 @@ class AnalizadorLexico {
                  '(\"[^\"]*\")|' .                 // cadenas
                  '(\d+\.\d+|\d+)|' .              // números (enteros y decimales)
                  '([\+\-\*\/\%\=\!\<\>\&\|\^\~\(\)\{\}\[\]\;\,\.])|' . // operadores y símbolos
+                 '(==|!=|>=|<=)|' .               // operadores de comparación
                  '([\s\t]+)/';                    // espacios en blanco
         
         preg_match_all($patron, $linea, $coincidencias, PREG_OFFSET_CAPTURE);

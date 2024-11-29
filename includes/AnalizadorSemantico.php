@@ -54,7 +54,17 @@ class AnalizadorSemantico {
                 break;
 
             case 'variable':
-                $this->validarVariable($nodo);
+                if ($nodo['tipoVariable'] !== 'else') {
+                    $this->validarVariable($nodo);
+                }
+                break;
+
+            case 'if':
+                $this->validarIf($nodo);
+                break;
+
+            case 'for':
+                $this->validarFor($nodo);
                 break;
         }
     }
@@ -66,7 +76,8 @@ class AnalizadorSemantico {
         $linea = $nodo['linea'];
 
         // Verificar si la variable ya está declarada
-        if (isset($this->tablaSímbolos[$this->alcanceActual]['variables'][$nombreVariable])) {
+        if (isset($this->tablaSímbolos[$this->alcanceActual]['variables'][$nombreVariable]) &&
+            !isset($this->tablaSímbolos[$this->alcanceActual]['variables'][$nombreVariable]['esVariableFor'])) {
             $this->errores[] = "Error en línea $linea: Variable '$nombreVariable' ya declarada";
             return;
         }
@@ -147,6 +158,72 @@ class AnalizadorSemantico {
             'parametros' => $nodo['parametros'] ?? [],
             'esStatic' => $nodo['esStatic'] ?? false,
             'línea' => $nodo['linea']
+        ];
+    }
+
+    private function validarIf($nodo) {
+        if (!isset($nodo['condicion'])) {
+            $this->errores[] = "Error en línea {$nodo['linea']}: Condición if faltante";
+            return;
+        }
+        
+        // Validar estructura de la condición
+        $condicion = trim($nodo['condicion']);
+        
+        // Validar operadores de comparación
+        if (!preg_match('/(==|!=|<=|>=|<|>)/', $condicion)) {
+            $this->errores[] = "Error en línea {$nodo['linea']}: Operador de comparación inválido o faltante";
+            return;
+        }
+        
+        // Validar operandos
+        $partes = preg_split('/(==|!=|<=|>=|<|>)/', $condicion);
+        if (count($partes) !== 2) {
+            $this->errores[] = "Error en línea {$nodo['linea']}: Formato de condición inválido";
+            return;
+        }
+        
+        // Validar que los operandos sean válidos (variables o números)
+        foreach ($partes as $parte) {
+            $parte = trim($parte);
+            if (!preg_match('/^[a-zA-Z_]\w*$/', $parte) && // variable
+                !preg_match('/^-?\d+$/', $parte)) {        // número
+                $this->errores[] = "Error en línea {$nodo['linea']}: Operando inválido '$parte'";
+            }
+        }
+    }
+
+    private function validarFor($nodo) {
+        if (!isset($nodo['inicializacion']) || !isset($nodo['condicion']) || !isset($nodo['incremento'])) {
+            $this->errores[] = "Error en línea {$nodo['linea']}: Estructura for incompleta";
+            return;
+        }
+
+        // Validar inicialización
+        if (!preg_match('/(int|double|float)\s+(\w+)\s*=\s*(.+)/', $nodo['inicializacion'])) {
+            $this->errores[] = "Error en línea {$nodo['linea']}: Inicialización de for inválida";
+            return;
+        }
+
+        // Validar condición
+        if (!preg_match('/(\w+)\s*(<=|>=|<|>|==|!=)\s*(\d+)/', $nodo['condicion'])) {
+            $this->errores[] = "Error en línea {$nodo['linea']}: Condición de for inválida";
+            return;
+        }
+
+        // Validar incremento
+        if (!preg_match('/(\w+)(\+\+|\+=\s*\d+|=\s*\w+\s*\+\s*\d+)/', $nodo['incremento'])) {
+            $this->errores[] = "Error en línea {$nodo['linea']}: Incremento de for inválido";
+            return;
+        }
+
+        // Registrar la variable del for en la tabla de símbolos
+        preg_match('/(int|double|float)\s+(\w+)\s*=\s*(.+)/', $nodo['inicializacion'], $matches);
+        $this->tablaSímbolos[$this->alcanceActual]['variables'][$matches[2]] = [
+            'tipo' => $matches[1],
+            'valorInicial' => $matches[3],
+            'línea' => $nodo['linea'],
+            'esVariableFor' => true
         ];
     }
 

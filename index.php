@@ -13,34 +13,41 @@ ini_set('error_log', __DIR__ . '/logs/errors.log');
 
 // Procesar la compilación
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $code = $_POST['code'] ?? '';
-    
-    // Análisis Léxico
-    $analizadorLexico = new AnalizadorLexico($code);
-    $tokens = $analizadorLexico->analizar();
-    $resultadoLexico = $analizadorLexico->obtenerResultadoHTML();
-    
-    // Análisis Sintáctico
-    $analizadorSintactico = new AnalizadorSintactico($tokens);
-    $arbolSintactico = $analizadorSintactico->analizar();
-    $resultadoSintactico = $analizadorSintactico->obtenerResultadoHTML();
-    
-    // Análisis Semántico
-    $analizadorSemantico = new AnalizadorSemantico();
-    $resultadoSemantico = $analizadorSemantico->analizar($arbolSintactico);
-    $resultadoSemanticoHTML = $analizadorSemantico->obtenerResultadoHTML();
-    
-    // Compilación final
-    $compiler = new JavaCompiler();
-    $resultado = $compiler->compile($code);
-    
-    header('Content-Type: application/json');
-    echo json_encode([
-        'lexicoHTML' => $resultadoLexico,
-        'sintacticoHTML' => $resultadoSintactico,
-        'semanticoHTML' => $resultadoSemanticoHTML,
-        'result' => $resultado
-    ]);
+    try {
+        $code = $_POST['code'] ?? '';
+        
+        // Análisis Léxico
+        $analizadorLexico = new AnalizadorLexico($code);
+        $tokens = $analizadorLexico->analizar();
+        $resultadoLexico = $analizadorLexico->obtenerResultadoHTML();
+        
+        // Análisis Sintáctico
+        $analizadorSintactico = new AnalizadorSintactico($tokens);
+        $arbolSintactico = $analizadorSintactico->analizar();
+        $resultadoSintactico = $analizadorSintactico->obtenerResultadoHTML();
+        
+        // Análisis Semántico
+        $analizadorSemantico = new AnalizadorSemantico();
+        $resultadoSemantico = $analizadorSemantico->analizar($arbolSintactico);
+        $resultadoSemanticoHTML = $analizadorSemantico->obtenerResultadoHTML();
+        
+        // Compilación final
+        $compiler = new JavaCompiler();
+        $resultado = $compiler->compile($code);
+        
+        header('Content-Type: application/json');
+        echo json_encode([
+            'lexicoHTML' => $resultadoLexico,
+            'sintacticoHTML' => $resultadoSintactico,
+            'semanticoHTML' => $resultadoSemanticoHTML,
+            'result' => $resultado
+        ]);
+    } catch (Exception $e) {
+        header('Content-Type: application/json');
+        echo json_encode([
+            'error' => $e->getMessage()
+        ]);
+    }
     exit;
 }
 ?>
@@ -85,6 +92,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <button onclick="compile()" class="btn btn-primary btn-lg px-4">
                                 <i class="bi bi-play-fill"></i> Compilar y Ejecutar
                             </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card shadow-sm mb-4">
+                    <div class="card-body">
+                        <h5 class="card-title">Puntuación</h5>
+                        <div id="puntuacion" class="text-center" style="font-size: 20px;">
+                            <strong id="puntuacion-value">0</strong>
                         </div>
                     </div>
                 </div>
